@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CyberPulse Vector: Starfighter Rush</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js (3D Graphics Engine) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- FontAwesome for UI Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@500;700&display=swap');
+
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #030712;
+            font-family: 'Rajdhani', sans-serif;
+            color: #f3f4f6;
+        }
+
+        .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        /* Glassmorphic UI Panels */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(56, 189, 248, 0.05);
+        }
+
+        .glass-button {
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.25), rgba(99, 102, 241, 0.25));
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+
+        .glass-button:hover:not(:disabled) {
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.55), rgba(99, 102, 241, 0.55));
+            border-color: rgba(56, 189, 248, 0.9);
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .glass-button:active:not(:disabled) {
+            transform: translateY(1px);
+        }
+
+        /* Cyber Glow Animations */
+        @keyframes pulseGlow {
+            0%, 100% { filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.6)); }
+            50% { filter: drop-shadow(0 0 24px rgba(236, 72, 153, 0.8)); }
+        }
+
+        .neon-glow {
+            animation: pulseGlow 3s infinite;
+        }
+
+        /* Custom Scrollbar for Hangar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(56, 189, 248, 0.5);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden">
+
+    <!-- 3D WebGL Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0 z-0"></div>
+
+    <!-- AUDIO SYNTHESIZER / SOUND ENGINE (Web Audio API) -->
+    <script>
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+
+            playCoin() {
+                if (this.muted) return;
+                this.init();
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(987.77, now);
+                osc.frequency.exponentialRampToValueAtTime(1318.51, now + 0.12);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.12);
+            }
+
+            playLaser() {
+                if (this.muted) return;
+                this.init();
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.15);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            }
+
+            playExplosion() {
+                if (this.muted) return;
+                this.init();
+                const now = this.ctx.currentTime;
+                const bufferSize = this.ctx.sampleRate * 0.4;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(800, now);
+                filter.frequency.exponentialRampToValueAtTime(50, now + 0.4);
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start(now);
+            }
+
+            playShield() {
+                if (this.muted) return;
+                this.init();
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.linearRampToValueAtTime(600, now + 0.2);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+
+            playBoost() {
+                if (this.muted) return;
+                this.init();
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(450, now + 0.3);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            }
+        }
+        const sfx = new SoundEngine();
+    </script>
+
+    <!-- OVERLAY UI LAYER -->
+    <div id="ui-overlay" class="relative z-10 w-full h-full pointer-events-none flex flex-col justify-between p-4 md:p-6">
+
+        <!-- TOP BAR: Stats & Currency -->
+        <div class="flex justify-between items-start w-full">
+            <!-- Health & Shields -->
+            <div class="glass-panel p-3 md:p-4 rounded-xl flex flex-col gap-2 pointer-events-auto min-w-[180px]">
+                <div class="flex items-center justify-between text-xs text-cyan-400 font-orbitron">
+                    <span><i class="fa-solid fa-shield-halved mr-1"></i> ESCUDO ESTRUCTURAL</span>
+                    <span id="hp-text">100%</span>
+                </div>
+                <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden p-0.5 border border-cyan-500/30">
+                    <div id="hp-bar" class="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full rounded-full transition-all duration-300 w-full shadow-[0_0_10px_#06b6d4]"></div>
+                </div>
+
+                <!-- Active Power-up indicators -->
+                <div class="flex gap-2 mt-1" id="powerup-badges">
+                    <div id="badge-shield" class="hidden text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded border border-cyan-400/40 animate-pulse">
+                        <i class="fa-solid fa-shield"></i> ESCUDO
+                    </div>
+                    <div id="badge-magnet" class="hidden text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-400/40 animate-pulse">
+                        <i class="fa-solid fa-magnet"></i> IMÁN
+                    </div>
+                    <div id="badge-double" class="hidden text-[10px] bg-fuchsia-500/20 text-fuchsia-300 px-2 py-0.5 rounded border border-fuchsia-400/40 animate-pulse">
+                        <i class="fa-solid fa-bolt"></i> DISPARO X2
+                    </div>
+                </div>
+            </div>
+
+            <!-- Credits & Level Info -->
+            <div class="flex flex-col items-end gap-2">
+                <div class="glass-panel px-4 py-2 rounded-xl flex items-center gap-3 pointer-events-auto border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+                    <div class="w-8 h-8 rounded-full bg-amber-500/20 border border-amber-400 flex items-center justify-center text-amber-400 text-lg shadow-[0_0_10px_#f59e0b]">
+                        <i class="fa-solid fa-coins"></i>
+                    </div>
+                    <div class="flex flex-col">
+                        <span class="text-[10px] text-amber-300/80 font-orbitron uppercase tracking-wider">Créditos de Plasma</span>
+                        <span id="credits-display" class="font-orbitron font-extrabold text-xl text-amber-300 tracking-wide">0</span>
+                    </div>
+                </div>
+
+                <div class="glass-panel px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs font-orbitron text-cyan-300">
+                    <span class="text-slate-400">NIVEL:</span>
+                    <span id="level-name-display" class="font-bold text-cyan-400">1. Cinturón de Asteroides</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- CENTER HUD: Level Progress & Boss Bar -->
+        <div id="center-hud" class="hidden self-center w-full max-w-md flex flex-col items-center gap-1">
+            <div class="w-full flex justify-between text-xs font-orbitron text-slate-300 mb-1">
+                <span id="progress-label"><i class="fa-solid fa-location-arrow"></i> DISTANCIA AL OBJETIVO</span>
+                <span id="progress-text">0%</span>
+            </div>
+            <div class="w-full bg-slate-900/80 rounded-full h-2.5 p-0.5 border border-slate-700">
+                <div id="level-progress-bar" class="bg-gradient-to-r from-blue-500 via-cyan-400 to-indigo-500 h-full rounded-full transition-all duration-200 w-0"></div>
+            </div>
+
+            <!-- Boss Health Bar -->
+            <div id="boss-hud" class="hidden w-full mt-3 flex flex-col gap-1">
+                <div class="flex justify-between text-xs font-orbitron text-red-400 font-bold tracking-widest animate-pulse">
+                    <span><i class="fa-solid fa-skull"></i> ALERTA: JEFE DE SECTOR</span>
+                    <span id="boss-hp-text">100%</span>
+                </div>
+                <div class="w-full bg-slate-950 rounded-full h-3 border border-red-500/60 p-0.5 shadow-[0_0_15px_rgba(239,68,68,0.4)]">
+                    <div id="boss-hp-bar" class="bg-gradient-to-r from-red-600 to-pink-500 h-full rounded-full transition-all duration-150 w-full"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN MENU / SCREENS OVERLAY -->
+        <div id="screen-container" class="absolute inset-0 pointer-events-auto flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md transition-all duration-500 z-20">
+
+            <!-- MAIN START MENU -->
+            <div id="menu-start" class="glass-panel p-8 md:p-10 rounded-2xl max-w-lg w-full flex flex-col items-center text-center gap-6 shadow-[0_0_50px_rgba(14,165,233,0.3)] border-cyan-500/40">
+                <div class="flex flex-col items-center">
+                    <div class="text-xs uppercase tracking-[0.3em] text-cyan-400 font-orbitron mb-1">Combate Aeroespacial 3D</div>
+                    <h1 class="text-4xl md:text-5xl font-black font-orbitron italic tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-200 to-indigo-400 neon-glow">
+                        CYBERPULSE
+                    </h1>
+                    <div class="text-sm font-orbitron font-semibold text-indigo-300 tracking-widest mt-1">STARFIGHTER RUSH</div>
+                </div>
+
+                <p class="text-sm text-slate-300 leading-relaxed font-sans">
+                    Pilota tu nave de combate a través de 5 sectores hostiles. Esquiva obstáculos, destruye enemigos, recolecta Créditos de Plasma y mejora tu flota en el Hangar.
+                </p>
+
+                <div class="w-full flex flex-col gap-3">
+                    <button id="btn-play" class="glass-button py-4 rounded-xl font-orbitron font-extrabold text-lg tracking-wider text-cyan-300 flex items-center justify-center gap-3">
+                        <i class="fa-solid fa-play text-cyan-400"></i> DESPEGAR AHORA
+                    </button>
+                    <button id="btn-hangar" class="glass-button py-3 rounded-xl font-orbitron font-bold text-sm tracking-wider text-amber-300 flex items-center justify-center gap-2 border-amber-500/40">
+                        <i class="fa-solid fa-warehouse text-amber-400"></i> HANGAR Y TIENDA
+                    </button>
+                </div>
+
+                <div class="text-xs text-slate-400 flex gap-4 mt-2 font-orbitron">
+                    <span><i class="fa-solid fa-keyboard"></i> W,A,S,D / Flechas</span>
+                    <span><i class="fa-solid fa-mouse"></i> Click/Espacio: Disparar</span>
+                    <span><i class="fa-solid fa-hand-pointer"></i> Táctil Soportado</span>
+                </div>
+            </div>
+
+            <!-- HANGAR & SHOP MENU -->
+            <div id="menu-hangar" class="hidden glass-panel p-6 md:p-8 rounded-2xl max-w-4xl w-full flex flex-col gap-6 max-h-[90vh] overflow-y-auto border-cyan-500/40">
+                <div class="flex justify-between items-center border-b border-slate-700/60 pb-4">
+                    <div>
+                        <h2 class="text-2xl font-bold font-orbitron text-cyan-400 flex items-center gap-2">
+                            <i class="fa-solid fa-warehouse"></i> HANGAR DE AERONAVES
+                        </h2>
+                        <p class="text-xs text-slate-400">Adquiere nuevas naves y equipamiento de combate.</p>
+                    </div>
+                    <button id="btn-close-hangar" class="glass-button w-10 h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <!-- Ships Selection Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="ships-grid"></div>
+
+                <!-- Upgrades Section -->
+                <div class="border-t border-slate-700/60 pt-4">
+                    <h3 class="text-lg font-bold font-orbitron text-amber-400 mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-microchip"></i> MEJORAS DE TECNOLOGÍA
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="upgrades-grid"></div>
+                </div>
+            </div>
+
+            <!-- GAME OVER / LEVEL CLEAR SCREEN -->
+            <div id="menu-result" class="hidden glass-panel p-8 rounded-2xl max-w-md w-full flex flex-col items-center text-center gap-6 border-cyan-500/40">
+                <div id="result-icon-container" class="w-16 h-16 rounded-full flex items-center justify-center text-3xl"></div>
+
+                <div>
+                    <h2 id="result-title" class="text-3xl font-black font-orbitron tracking-wider"></h2>
+                    <p id="result-subtitle" class="text-xs text-slate-400 mt-1 font-orbitron"></p>
+                </div>
+
+                <div class="w-full bg-slate-900/60 rounded-xl p-4 flex flex-col gap-2 border border-slate-800 text-sm font-orbitron">
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Créditos Recolectados:</span>
+                        <span id="result-credits" class="text-amber-400 font-bold">+0</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Puntuación Final:</span>
+                        <span id="result-score" class="text-cyan-400 font-bold">0</span>
+                    </div>
+                </div>
+
+                <div class="w-full flex flex-col gap-3">
+                    <button id="btn-restart" class="glass-button py-3.5 rounded-xl font-orbitron font-bold text-cyan-300 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-rotate-right"></i> REINTENTAR / CONTINUAR
+                    </button>
+                    <button id="btn-result-hangar" class="glass-button py-3 rounded-xl font-orbitron font-bold text-amber-300 flex items-center justify-center gap-2 border-amber-500/40">
+                        <i class="fa-solid fa-warehouse"></i> IR AL HANGAR
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- MOBILE TOUCH CONTROLS -->
+        <div id="touch-controls" class="hidden pointer-events-auto w-full flex justify-between items-end pb-4 px-2">
+            <!-- Virtual Joystick Zone -->
+            <div id="joystick-zone" class="w-32 h-32 rounded-full bg-slate-800/40 border border-cyan-500/30 backdrop-blur-sm relative flex items-center justify-center touch-none">
+                <div id="joystick-knob" class="w-12 h-12 rounded-full bg-cyan-500/60 border border-cyan-300 shadow-[0_0_15px_#06b6d4] absolute"></div>
+            </div>
+
+            <!-- Fire Button -->
+            <button id="btn-touch-fire" class="w-20 h-20 rounded-full bg-gradient-to-br from-red-500/60 to-pink-600/60 border-2 border-red-400 text-white font-orbitron font-extrabold flex items-center justify-center shadow-[0_0_20px_rgba(239,68,68,0.5)] active:scale-95 transition-transform">
+                <i class="fa-solid fa-crosshairs text-2xl"></i>
+            </button>
+        </div>
+
+    </div>
+
+    <!-- MAIN GAME ENGINE CODE -->
+    <script>
+        // --- GAME CONFIGURATION & STATE ---
+        const GAME_CONFIG = {
+            levels: [
+                { id: 1, name: 'Cinturón de Asteroides', speed: 1.2, bgHex: 0x0a0a1a, fogHex: 0x0a0a1a, length: 1500, obstacleType: 'asteroid' },
+                { id: 2, name: 'Ciudad Cyberpunk', speed: 1.5, bgHex: 0x18002a, fogHex: 0x18002a, length: 2000, obstacleType: 'cyber' },
+                { id: 3, name: 'Tormenta de Plasma', speed: 1.8, bgHex: 0x001f2d, fogHex: 0x001f2d, length: 2500, obstacleType: 'plasma' },
+                { id: 4, name: 'Estación Abandonada', speed: 2.1, bgHex: 0x1a0500, fogHex: 0x1a0500, length: 3000, obstacleType: 'station' },
+                { id: 5, name: 'Núcleo Alienígena', speed: 2.5, bgHex: 0x051a05, fogHex: 0x051a05, length: 3500, obstacleType: 'alien' }
+            ],
+            ships: [
+                { id: 'alpha', name: 'VX-Alpha Striker', cost: 0, speed: 1.0, shield: 100, magnet: 15, color: 0x00f0ff, desc: 'Nave estándar equilibrada.' },
+                { id: 'phantom', name: 'Neon Phantom', cost: 500, speed: 1.3, shield: 80, magnet: 25, color: 0xff0077, desc: 'Alta velocidad y maniobrabilidad.' },
+                { id: 'titan', name: 'Juggernaut Dread', cost: 1200, speed: 0.85, shield: 200, magnet: 15, color: 0xffaa00, desc: 'Blindaje pesado y máxima resistencia.' }
+            ],
+            upgrades: {
+                magnet: { level: 1, max: 3, cost: 250, name: 'Imán de Plasma', desc: 'Aumenta el radio de atracción de monedas.' },
+                shield: { level: 1, max: 3, cost: 300, name: 'Reparación de Escudo', desc: 'Aumenta el escudo máximo de la nave.' },
+                doubleFire: { level: 0, max: 1, cost: 600, name: 'Cañones Dobles', desc: 'Dispara dos cañones láser simultáneos.' }
+            }
+        };
+
+        let gameState = {
+            credits: parseInt(localStorage.getItem('cp_credits') || '0'),
+            currentLevelIndex: 0,
+            selectedShipId: localStorage.getItem('cp_ship') || 'alpha',
+            ownedShips: JSON.parse(localStorage.getItem('cp_owned_ships') || '["alpha"]'),
+            upgrades: JSON.parse(localStorage.getItem('cp_upgrades') || JSON.stringify(GAME_CONFIG.upgrades)),
+            active: false,
+            score: 0,
+            distanceCovered: 0,
+            playerHp: 100,
+            maxHp: 100,
+            isBossActive: false,
+            bossHp: 100,
+            bossMaxHp: 500
+        };
+
+        // --- THREE.JS GRAPHICS INITIALIZATION ---
+        let scene, camera, renderer;
+        let playerMesh, playerGroup, shieldMesh;
+        let obstacles = [];
+        let coins = [];
+        let lasers = [];
+        let particles = [];
+        let bossMesh = null;
+
+        // Input Handling
+        const keys = { W: false, A: false, S: false, D: false, Space: false };
+        let touchJoystick = { x: 0, y: 0, active: false };
+
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(GAME_CONFIG.levels[0].bgHex);
+            scene.fog = new THREE.FogExp2(GAME_CONFIG.levels[0].fogHex, 0.012);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 12);
+            camera.lookAt(0, 0, -10);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0x38bdf8, 1.2);
+            dirLight.position.set(10, 20, 10);
+            scene.add(dirLight);
+
+            // Environment & Player
+            createEnvironmentGrid();
+            createPlayerShip();
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createEnvironmentGrid() {
+            const gridHelper = new THREE.GridHelper(200, 40, 0x00f0ff, 0x1e293b);
+            gridHelper.position.y = -6;
+            gridHelper.position.z = -80;
+            scene.add(gridHelper);
+
+            // Stars Particles
+            const starsGeo = new THREE.BufferGeometry();
+            const count = 1000;
+            const positions = new Float32Array(count * 3);
+            for (let i = 0; i < count * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 200;
+                positions[i + 1] = (Math.random() - 0.5) * 200;
+                positions[i + 2] = -Math.random() * 200;
+            }
+            starsGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const starsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.6, transparent: true });
+            const starField = new THREE.Points(starsGeo, starsMat);
+            scene.add(starField);
+        }
+
+        function createPlayerShip() {
+            if (playerGroup) scene.remove(playerGroup);
+
+            playerGroup = new THREE.Group();
+            const shipData = GAME_CONFIG.ships.find(s => s.id === gameState.selectedShipId) || GAME_CONFIG.ships[0];
+
+            // Fuselage
+            const bodyGeo = new THREE.ConeGeometry(0.8, 3.5, 5);
+            bodyGeo.rotateX(Math.PI / 2);
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: shipData.color,
+                roughness: 0.2,
+                metalness: 0.8,
+                emissive: shipData.color,
+                emissiveIntensity: 0.2
+            });
+            playerMesh = new THREE.Mesh(bodyGeo, bodyMat);
+            playerGroup.add(playerMesh);
+
+            // Wings
+            const wingGeo = new THREE.BoxGeometry(3.2, 0.1, 1.2);
+            const wingMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.9 });
+            const wings = new THREE.Mesh(wingGeo, wingMat);
+            wings.position.set(0, 0, 0.3);
+            playerGroup.add(wings);
+
+            // Engine
+            const engineGeo = new THREE.CylinderGeometry(0.3, 0.1, 0.8);
+            engineGeo.rotateX(Math.PI / 2);
+            const engineMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+            const engine = new THREE.Mesh(engineGeo, engineMat);
+            engine.position.set(0, 0, 1.8);
+            playerGroup.add(engine);
+
+            // Shield Mesh
+            const shieldGeo = new THREE.SphereGeometry(2.2, 16, 16);
+            const shieldMat = new THREE.MeshBasicMaterial({
+                color: 0x38bdf8,
+                transparent: true,
+                opacity: 0,
+                wireframe: true
+            });
+            shieldMesh = new THREE.Mesh(shieldGeo, shieldMat);
+            playerGroup.add(shieldMesh);
+
+            playerGroup.position.set(0, 0, 0);
+            scene.add(playerGroup);
+        }
+
+        function spawnObstacle() {
+            const level = GAME_CONFIG.levels[gameState.currentLevelIndex];
+            const group = new THREE.Group();
+            let geo, mat;
+
+            const posX = (Math.random() - 0.5) * 18;
+            const posY = (Math.random() - 0.5) * 8;
+            const posZ = -120;
+
+            if (level.obstacleType === 'asteroid') {
+                geo = new THREE.DodecahedronGeometry(1.5 + Math.random() * 1.2);
+                mat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.9 });
+            } else if (level.obstacleType === 'cyber') {
+                geo = new THREE.BoxGeometry(1.5, 6, 1.5);
+                mat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 0.5 });
+            } else {
+                geo = new THREE.IcosahedronGeometry(1.8);
+                mat = new THREE.MeshStandardMaterial({ color: 0xa855f7, wireframe: true });
+            }
+
+            const mesh = new THREE.Mesh(geo, mat);
+            group.add(mesh);
+            group.position.set(posX, posY, posZ);
+
+            group.userData = {
+                rotSpeedX: (Math.random() - 0.5) * 0.05,
+                rotSpeedY: (Math.random() - 0.5) * 0.05,
+                hp: 20
+            };
+
+            scene.add(group);
+            obstacles.push(group);
+        }
+
+        function spawnCoin() {
+            const geo = new THREE.CylinderGeometry(0.6, 0.6, 0.15, 12);
+            geo.rotateX(Math.PI / 2);
+            const mat = new THREE.MeshStandardMaterial({
+                color: 0xf59e0b,
+                metalness: 0.9,
+                roughness: 0.1,
+                emissive: 0xd97706,
+                emissiveIntensity: 0.5
+            });
+            const coin = new THREE.Mesh(geo, mat);
+
+            coin.position.set(
+                (Math.random() - 0.5) * 16,
+                (Math.random() - 0.5) * 8,
+                -110
+            );
+
+            scene.add(coin);
+            coins.push(coin);
+        }
+
+        function spawnBoss() {
+            gameState.isBossActive = true;
+            gameState.bossHp = gameState.bossMaxHp;
+            document.getElementById('boss-hud').classList.remove('hidden');
+
+            const group = new THREE.Group();
+            
+            const coreGeo = new THREE.OctahedronGeometry(4);
+            const coreMat = new THREE.MeshStandardMaterial({ color: 0xd97706, emissive: 0xef4444, emissiveIntensity: 0.8 });
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            group.add(core);
+
+            const ringGeo = new THREE.TorusGeometry(6, 0.4, 8, 24);
+            const ringMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, wireframe: true });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            group.add(ring);
+
+            group.position.set(0, 0, -60);
+            bossMesh = group;
+            scene.add(bossMesh);
+        }
+
+        function fireLaser() {
+            sfx.playLaser();
+            const doubleFire = gameState.upgrades.doubleFire.level > 0;
+            const offsets = doubleFire ? [-0.8, 0.8] : [0];
+
+            offsets.forEach(offset => {
+                const geo = new THREE.CylinderGeometry(0.08, 0.08, 1.5);
+                geo.rotateX(Math.PI / 2);
+                const mat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+                const laser = new THREE.Mesh(geo, mat);
+                laser.position.set(playerGroup.position.x + offset, playerGroup.position.y, playerGroup.position.z - 1);
+                scene.add(laser);
+                lasers.push(laser);
+            });
+        }
+
+        function createExplosion(pos, color = 0xf59e0b) {
+            sfx.playExplosion();
+            for (let i = 0; i < 15; i++) {
+                const geo = new THREE.SphereGeometry(0.2, 8, 8);
+                const mat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 1 });
+                const p = new THREE.Mesh(geo, mat);
+                p.position.copy(pos);
+                p.userData = {
+                    vel: new THREE.Vector3(
+                        (Math.random() - 0.5) * 0.4,
+                        (Math.random() - 0.5) * 0.4,
+                        (Math.random() - 0.5) * 0.4
+                    ),
+                    life: 1.0
+                };
+                scene.add(p);
+                particles.push(p);
+            }
+        }
+
+        // --- GAME LOOP & UPDATES ---
+        let lastFrameTime = performance.now();
+        let lastSpawnTime = 0;
+        let lastCoinSpawnTime = 0;
+
+        function animate(currentTime) {
+            requestAnimationFrame(animate);
+
+            const delta = (currentTime - lastFrameTime) / 1000;
+            lastFrameTime = currentTime;
+
+            if (gameState.active) {
+                updateGameplay(delta, currentTime);
+            } else {
+                if (playerGroup) {
+                    playerGroup.rotation.y += 0.01;
+                    playerGroup.position.y = Math.sin(currentTime * 0.002) * 0.3;
+                }
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.position.add(p.userData.vel);
+                p.userData.life -= 0.03;
+                p.material.opacity = p.userData.life;
+                if (p.userData.life <= 0) {
+                    scene.remove(p);
+                    particles.splice(i, 1);
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function updateGameplay(delta, currentTime) {
+            const level = GAME_CONFIG.levels[gameState.currentLevelIndex];
+            const currentShip = GAME_CONFIG.ships.find(s => s.id === gameState.selectedShipId);
+
+            // Movement Logic
+            const moveSpeed = 14 * currentShip.speed;
+            let moveX = 0;
+            let moveY = 0;
+
+            if (keys.A || keys.ArrowLeft) moveX -= 1;
+            if (keys.D || keys.ArrowRight) moveX += 1;
+            if (keys.W || keys.ArrowUp) moveY += 1;
+            if (keys.S || keys.ArrowDown) moveY -= 1;
+
+            if (touchJoystick.active) {
+                moveX = touchJoystick.x;
+                moveY = -touchJoystick.y;
+            }
+
+            playerGroup.position.x += moveX * moveSpeed * delta;
+            playerGroup.position.y += moveY * moveSpeed * delta;
+
+            playerGroup.position.x = Math.max(-10, Math.min(10, playerGroup.position.x));
+            playerGroup.position.y = Math.max(-5, Math.min(5, playerGroup.position.y));
+
+            playerGroup.rotation.z = -moveX * 0.4;
+            playerGroup.rotation.x = moveY * 0.2;
+
+            // Progress & Level Completion
+            gameState.distanceCovered += level.speed * 20 * delta;
+            const progress = Math.min(100, (gameState.distanceCovered / level.length) * 100);
+            document.getElementById('level-progress-bar').style.width = `${progress}%`;
+            document.getElementById('progress-text').textContent = `${Math.floor(progress)}%`;
+
+            if (progress >= 90 && !gameState.isBossActive && !bossMesh) {
+                spawnBoss();
+            }
+
+            // Spawning Logic
+            if (!gameState.isBossActive && progress < 85) {
+                if (currentTime - lastSpawnTime > (1200 / level.speed)) {
+                    spawnObstacle();
+                    lastSpawnTime = currentTime;
+                }
+                if (currentTime - lastCoinSpawnTime > 800) {
+                    spawnCoin();
+                    lastCoinSpawnTime = currentTime;
+                }
+            }
+
+            // Lasers Logic
+            for (let i = lasers.length - 1; i >= 0; i--) {
+                const laser = lasers[i];
+                laser.position.z -= 60 * delta;
+
+                for (let j = obstacles.length - 1; j >= 0; j--) {
+                    const obs = obstacles[j];
+                    if (laser.position.distanceTo(obs.position) < 2.0) {
+                        createExplosion(obs.position, 0xef4444);
+                        scene.remove(obs);
+                        obstacles.splice(j, 1);
+                        scene.remove(laser);
+                        lasers.splice(i, 1);
+                        gameState.score += 50;
+                        break;
+                    }
+                }
+
+                if (bossMesh && laser.position.distanceTo(bossMesh.position) < 4.5) {
+                    createExplosion(laser.position, 0xf59e0b);
+                    scene.remove(laser);
+                    lasers.splice(i, 1);
+                    gameState.bossHp -= 10;
+                    document.getElementById('boss-hp-bar').style.width = `${(gameState.bossHp / gameState.bossMaxHp) * 100}%`;
+                    document.getElementById('boss-hp-text').textContent = `${Math.max(0, Math.floor((gameState.bossHp / gameState.bossMaxHp) * 100))}%`;
+
+                    if (gameState.bossHp <= 0) {
+                        createExplosion(bossMesh.position, 0x38bdf8);
+                        scene.remove(bossMesh);
+                        bossMesh = null;
+                        completeLevel();
+                    }
+                }
+
+                if (laser.position.z < -130) {
+                    scene.remove(laser);
+                    lasers.splice(i, 1);
+                }
+            }
+
+            // Obstacles Movement
+            const speedZ = level.speed * 25 * delta;
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obs = obstacles[i];
+                obs.position.z += speedZ;
+                obs.rotation.x += obs.userData.rotSpeedX;
+                obs.rotation.y += obs.userData.rotSpeedY;
+
+                if (obs.position.distanceTo(playerGroup.position) < 2.0) {
+                    triggerHit(25);
+                    createExplosion(obs.position, 0xef4444);
+                    scene.remove(obs);
+                    obstacles.splice(i, 1);
+                    continue;
+                }
+
+                if (obs.position.z > 10) {
+                    scene.remove(obs);
+                    obstacles.splice(i, 1);
+                }
+            }
+
+            // Coins & Magnet Logic
+            const magnetRadius = currentShip.magnet + (gameState.upgrades.magnet.level * 5);
+            for (let i = coins.length - 1; i >= 0; i--) {
+                const coin = coins[i];
+                coin.position.z += speedZ;
+                coin.rotation.z += 0.05;
+
+                const dist = coin.position.distanceTo(playerGroup.position);
+                if (dist < magnetRadius) {
+                    coin.position.lerp(playerGroup.position, 0.15);
+                }
+
+                if (dist < 1.5) {
+                    sfx.playCoin();
+                    gameState.credits += 10;
+                    gameState.score += 20;
+                    updateCreditsUI();
+                    scene.remove(coin);
+                    coins.splice(i, 1);
+                    continue;
+                }
+
+                if (coin.position.z > 10) {
+                    scene.remove(coin);
+                    coins.splice(i, 1);
+                }
+            }
+
+            // Boss Animation
+            if (bossMesh) {
+                bossMesh.rotation.z += 0.01;
+                bossMesh.position.x = Math.sin(currentTime * 0.002) * 8;
+            }
+        }
+
+        // --- GAME ACTIONS & STATE MANAGEMENT ---
+        function triggerHit(damage) {
+            sfx.playShield();
+            gameState.playerHp -= damage;
+
+            shieldMesh.material.opacity = 0.8;
+            setTimeout(() => { shieldMesh.material.opacity = 0; }, 300);
+
+            const hpPercent = Math.max(0, (gameState.playerHp / gameState.maxHp) * 100);
+            document.getElementById('hp-bar').style.width = `${hpPercent}%`;
+            document.getElementById('hp-text').textContent = `${Math.floor(hpPercent)}%`;
+
+            if (gameState.playerHp <= 0) {
+                gameOver(false);
+            }
+        }
+
+        function startGame() {
+            gameState.active = true;
+            gameState.score = 0;
+            gameState.distanceCovered = 0;
+            gameState.isBossActive = false;
+            
+            const currentShip = GAME_CONFIG.ships.find(s => s.id === gameState.selectedShipId);
+            gameState.maxHp = currentShip.shield + (gameState.upgrades.shield.level * 25);
+            gameState.playerHp = gameState.maxHp;
+
+            obstacles.forEach(o => scene.remove(o));
+            coins.forEach(c => scene.remove(c));
+            lasers.forEach(l => scene.remove(l));
+            if (bossMesh) scene.remove(bossMesh);
+            obstacles = []; coins = []; lasers = []; bossMesh = null;
+
+            document.getElementById('screen-container').classList.add('hidden');
+            document.getElementById('center-hud').classList.remove('hidden');
+            document.getElementById('boss-hud').classList.add('hidden');
+            document.getElementById('hp-bar').style.width = '100%';
+            document.getElementById('hp-text').textContent = '100%';
+
+            const level = GAME_CONFIG.levels[gameState.currentLevelIndex];
+            document.getElementById('level-name-display').textContent = `${level.id}. ${level.name}`;
+            scene.background.setHex(level.bgHex);
+            scene.fog.color.setHex(level.fogHex);
+
+            createPlayerShip();
+        }
+
+        function completeLevel() {
+            gameState.active = false;
+            sfx.playBoost();
+
+            if (gameState.currentLevelIndex < GAME_CONFIG.levels.length - 1) {
+                gameState.currentLevelIndex++;
+                showResultScreen(true, 'SECTOR COMPLETADO', '¡Excelente pilotaje! Siguiente sector desbloqueado.');
+            } else {
+                showResultScreen(true, 'VICTORIA TOTAL', '¡Has derrotado al Núcleo Alienígena y completado el juego!');
+            }
+            saveState();
+        }
+
+        function gameOver(win) {
+            gameState.active = false;
+            sfx.playExplosion();
+            showResultScreen(false, 'NAVE DESTRUIDA', 'Tu nave no resistió el impacto estructural.');
+            saveState();
+        }
+
+        function showResultScreen(win, title, subtitle) {
+            document.getElementById('screen-container').classList.remove('hidden');
+            document.getElementById('menu-start').classList.add('hidden');
+            document.getElementById('menu-hangar').classList.add('hidden');
+            document.getElementById('menu-result').classList.remove('hidden');
+
+            const iconBox = document.getElementById('result-icon-container');
+            const titleEl = document.getElementById('result-title');
+
+            if (win) {
+                iconBox.className = "w-16 h-16 rounded-full flex items-center justify-center text-3xl bg-emerald-500/20 text-emerald-400 border border-emerald-400/40 shadow-[0_0_20px_#10b981]";
+                iconBox.innerHTML = '<i class="fa-solid fa-trophy"></i>';
+                titleEl.className = "text-3xl font-black font-orbitron tracking-wider text-emerald-400";
+            } else {
+                iconBox.className = "w-16 h-16 rounded-full flex items-center justify-center text-3xl bg-red-500/20 text-red-400 border border-red-400/40 shadow-[0_0_20px_#ef4444]";
+                iconBox.innerHTML = '<i class="fa-solid fa-burst"></i>';
+                titleEl.className = "text-3xl font-black font-orbitron tracking-wider text-red-400";
+            }
+
+            titleEl.textContent = title;
+            document.getElementById('result-subtitle').textContent = subtitle;
+            document.getElementById('result-credits').textContent = `+${gameState.credits}`;
+            document.getElementById('result-score').textContent = gameState.score;
+        }
+
+        function updateCreditsUI() {
+            document.getElementById('credits-display').textContent = gameState.credits;
+        }
+
+        function saveState() {
+            localStorage.setItem('cp_credits', gameState.credits.toString());
+            localStorage.setItem('cp_ship', gameState.selectedShipId);
+            localStorage.setItem('cp_owned_ships', JSON.stringify(gameState.ownedShips));
+            localStorage.setItem('cp_upgrades', JSON.stringify(gameState.upgrades));
+        }
+
+        // --- HANGAR & UI RENDERERS ---
+        function renderHangarUI() {
+            updateCreditsUI();
+            const shipsGrid = document.getElementById('ships-grid');
+            shipsGrid.innerHTML = '';
+
+            GAME_CONFIG.ships.forEach(ship => {
+                const isOwned = gameState.ownedShips.includes(ship.id);
+                const isSelected = gameState.selectedShipId === ship.id;
+
+                const card = document.createElement('div');
+                card.className = `glass-panel p-4 rounded-xl flex flex-col justify-between border ${isSelected ? 'border-cyan-400 shadow-[0_0_15px_#06b6d4]' : 'border-slate-800'}`;
+
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start mb-2">
+                            <h4 class="font-orbitron font-bold text-cyan-300">${ship.name}</h4>
+                            ${isSelected ? '<span class="text-[10px] bg-cyan-500/30 text-cyan-300 px-2 py-0.5 rounded font-orbitron">EQUIPADO</span>' : ''}
+                        </div>
+                        <p class="text-xs text-slate-400 mb-3">${ship.desc}</p>
+                        <div class="text-[11px] font-orbitron flex flex-col gap-1 text-slate-300 mb-4">
+                            <div>VELOCIDAD: <span class="text-cyan-400">${ship.speed * 100}%</span></div>
+                            <div>ESCUDO: <span class="text-emerald-400">${ship.shield} HP</span></div>
+                        </div>
+                    </div>
+                    <div>
+                        ${isOwned ? `
+                            <button onclick="selectShip('${ship.id}')" class="w-full glass-button py-2 rounded-lg font-orbitron text-xs font-bold ${isSelected ? 'opacity-50 cursor-default' : 'text-cyan-300'}" ${isSelected ? 'disabled' : ''}>
+                                ${isSelected ? 'EQUIPADO' : 'SELECCIONAR'}
+                            </button>
+                        ` : `
+                            <button onclick="buyShip('${ship.id}')" class="w-full glass-button py-2 rounded-lg font-orbitron text-xs font-bold text-amber-300 border-amber-500/40">
+                                COMPRAR <i class="fa-solid fa-coins"></i> ${ship.cost}
+                            </button>
+                        `}
+                    </div>
+                `;
+                shipsGrid.appendChild(card);
+            });
+
+            const upgradesGrid = document.getElementById('upgrades-grid');
+            upgradesGrid.innerHTML = '';
+
+            Object.keys(GAME_CONFIG.upgrades).forEach(key => {
+                const up = gameState.upgrades[key];
+                const isMax = up.level >= up.max;
+
+                const card = document.createElement('div');
+                card.className = "glass-panel p-4 rounded-xl flex flex-col justify-between border border-slate-800";
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="font-orbitron font-bold text-sm text-slate-200">${up.name}</span>
+                            <span class="text-xs font-orbitron text-amber-400">NVL ${up.level}/${up.max}</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mb-3">${up.desc}</p>
+                    </div>
+                    <button onclick="buyUpgrade('${key}')" class="w-full glass-button py-2 rounded-lg font-orbitron text-xs font-bold text-amber-300 border-amber-500/40 ${isMax ? 'opacity-50 cursor-default' : ''}" ${isMax ? 'disabled' : ''}>
+                        ${isMax ? 'MÁXIMO NIVEL' : `MEJORAR: ${up.cost} CRÉDITOS`}
+                    </button>
+                `;
+                upgradesGrid.appendChild(card);
+            });
+        }
+
+        function selectShip(shipId) {
+            gameState.selectedShipId = shipId;
+            saveState();
+            createPlayerShip();
+            renderHangarUI();
+        }
+
+        function buyShip(shipId) {
+            const ship = GAME_CONFIG.ships.find(s => s.id === shipId);
+            if (gameState.credits >= ship.cost) {
+                gameState.credits -= ship.cost;
+                gameState.ownedShips.push(shipId);
+                selectShip(shipId);
+            }
+        }
+
+        function buyUpgrade(key) {
+            const up = gameState.upgrades[key];
+            if (up.level < up.max && gameState.credits >= up.cost) {
+                gameState.credits -= up.cost;
+                up.level++;
+                saveState();
+                renderHangarUI();
+            }
+        }
+
+        // --- CONTROLS & EVENT LISTENERS ---
+        function setupControls() {
+            window.addEventListener('keydown', (e) => {
+                if (e.code === 'KeyW' || e.code === 'ArrowUp') keys.W = true;
+                if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.A = true;
+                if (e.code === 'KeyS' || e.code === 'ArrowDown') keys.S = true;
+                if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.D = true;
+                if (e.code === 'Space' && gameState.active) fireLaser();
+            });
+
+            window.addEventListener('keyup', (e) => {
+                if (e.code === 'KeyW' || e.code === 'ArrowUp') keys.W = false;
+                if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.A = false;
+                if (e.code === 'KeyS' || e.code === 'ArrowDown') keys.S = false;
+                if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.D = false;
+            });
+
+            window.addEventListener('mousedown', (e) => {
+                if (gameState.active && e.target.tagName !== 'BUTTON') {
+                    fireLaser();
+                }
+            });
+
+            const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+            if (isTouchDevice) {
+                document.getElementById('touch-controls').classList.remove('hidden');
+                
+                const joystickZone = document.getElementById('joystick-zone');
+                const joystickKnob = document.getElementById('joystick-knob');
+
+                joystickZone.addEventListener('touchstart', () => { touchJoystick.active = true; });
+
+                joystickZone.addEventListener('touchmove', (e) => {
+                    if (!touchJoystick.active) return;
+                    const touch = e.touches[0];
+                    const rect = joystickZone.getBoundingClientRect();
+                    const centerX = rect.left + rect.width / 2;
+                    const centerY = rect.top + rect.height / 2;
+
+                    const maxDist = rect.width / 2;
+                    let deltaX = touch.clientX - centerX;
+                    let deltaY = touch.clientY - centerY;
+
+                    const dist = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                    if (dist > maxDist) {
+                        deltaX = (deltaX / dist) * maxDist;
+                        deltaY = (deltaY / dist) * maxDist;
+                    }
+
+                    touchJoystick.x = deltaX / maxDist;
+                    touchJoystick.y = deltaY / maxDist;
+
+                    joystickKnob.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+                });
+
+                const resetJoystick = () => {
+                    touchJoystick.active = false;
+                    touchJoystick.x = 0;
+                    touchJoystick.y = 0;
+                    joystickKnob.style.transform = `translate(0px, 0px)`;
+                };
+
+                joystickZone.addEventListener('touchend', resetJoystick);
+                joystickZone.addEventListener('touchcancel', resetJoystick);
+
+                document.getElementById('btn-touch-fire').addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    if (gameState.active) fireLaser();
+                });
+            }
+
+            document.getElementById('btn-play').addEventListener('click', startGame);
+            
+            document.getElementById('btn-hangar').addEventListener('click', () => {
+                renderHangarUI();
+                document.getElementById('menu-start').classList.add('hidden');
+                document.getElementById('menu-hangar').classList.remove('hidden');
+            });
+
+            document.getElementById('btn-close-hangar').addEventListener('click', () => {
+                document.getElementById('menu-hangar').classList.hidden = true;
+                document.getElementById('menu-hangar').classList.add('hidden');
+                document.getElementById('menu-start').classList.remove('hidden');
+            });
+
+            document.getElementById('btn-restart').addEventListener('click', startGame);
+
+            document.getElementById('btn-result-hangar').addEventListener('click', () => {
+                renderHangarUI();
+                document.getElementById('menu-result').classList.add('hidden');
+                document.getElementById('menu-hangar').classList.remove('hidden');
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.onload = function() {
+            initThreeJS();
+            setupControls();
+            updateCreditsUI();
+            requestAnimationFrame(animate);
+        };
+    </script>
+</body>
+</html>
